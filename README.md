@@ -2,7 +2,7 @@
 
 給 4 歲左右幼兒使用的 Bingo 抽數字網頁小遊戲。
 
-▶️ 線上玩：https://你的用戶名.github.io/倉庫名稱/
+▶️ 線上玩：https://christie-studio.github.io/bingo-number/
 
 ## 功能
 - 🐢 小烏龜 3×3（數字 1～15）
