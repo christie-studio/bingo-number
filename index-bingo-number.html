@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bingo 抽數字 🎈</title>
+<style>
+  /* ========== 顏色與字體（想改配色就改這裡） ========== */
+  :root {
+    --sky: #bfe8ff;        /* 背景天空藍 */
+    --sky-2: #e8f7ff;      /* 背景淺色 */
+    --sun: #ffd23f;        /* 太陽黃：已抽到的數字 */
+    --coral: #ff6b5e;      /* 珊瑚紅：抽數字大按鈕 */
+    --coral-dark: #d94a3f;
+    --mint: #3ecf9b;       /* 薄荷綠：選模式 */
+    --ink: #3a2e5c;        /* 深紫：文字 */
+    --white: #ffffff;
+    --font: "Arial Rounded MT Bold", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--sky); }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--font);
+    color: var(--ink);
+    background: var(--sky);           /* 單一底色（原本的漸層在畫面較長時會重複，造成上淺下深） */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    touch-action: manipulation;       /* 避免連點放大 */
+    user-select: none; -webkit-user-select: none;
+    overflow-x: hidden;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; touch-action: manipulation; }
+  button:focus-visible { outline: 5px solid var(--ink); outline-offset: 3px; }
+  .hidden { display: none !important; }
+
+  /* ========== 首頁：選模式 ========== */
+  #home {
+    min-height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3vh; padding: 20px;
+    text-align: center;
+  }
+  #home h1 { margin: 0; font-size: clamp(2.2rem, 8vw, 4rem); }
+  #home p { margin: 0; font-size: clamp(1.2rem, 4vw, 1.8rem); }
+  .modes { display: flex; flex-direction: column; gap: 16px; width: min(92vw, 520px); }
+  .mode-btn {
+    background: var(--c, var(--mint)); color: var(--white);   /* --c 底色、--cs 陰影色，在 HTML 裡各動物自訂 */
+    border-radius: 36px; padding: 16px 22px;
+    font-size: clamp(1.9rem, 8vw, 3rem);
+    box-shadow: 0 8px 0 var(--cs, #25a578);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 12px;
+    text-align: left;
+  }
+  .mode-btn small { font-size: clamp(1.1rem, 4.6vw, 1.6rem); opacity: .95; }
+  .mode-btn:active { transform: translateY(6px); box-shadow: 0 2px 0 var(--cs, #25a578); }
+
+  /* ========== 遊戲畫面 ========== */
+  #game {
+    min-height: 100%; display: flex; flex-direction: column;
+    align-items: center; gap: 2vh; padding: 12px 14px 20px;
+  }
+  .topbar { width: min(96vw, 760px); display: flex; justify-content: space-between; gap: 10px; }
+  .small-btn {
+    background: var(--white); color: var(--ink);
+    border-radius: 22px; padding: 10px 18px; min-height: 48px;
+    font-size: 1.15rem; box-shadow: 0 4px 0 rgba(58,46,92,.25);
+  }
+  .small-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(58,46,92,.25); }
+
+  /* 中央大數字 */
+  #display {
+    width: min(92vw, 560px);
+    min-height: clamp(150px, 26vh, 260px);
+    display: flex; align-items: center; justify-content: center; gap: 2vw;
+    background: var(--white); border-radius: 40px;
+    box-shadow: 0 8px 0 rgba(58,46,92,.2);
+    font-size: clamp(2rem, 7vw, 3rem);
+  }
+  #bigNum {
+    font-size: clamp(6rem, 30vw, 12rem); line-height: 1;
+    min-width: 2ch; text-align: center; color: var(--coral);
+  }
+  #display .deco { font-size: clamp(2rem, 9vw, 4rem); }
+  #display.done { flex-direction: column; text-align: center; padding: 10px; }
+  #display.done #bigNum { font-size: clamp(2.2rem, 9vw, 4rem); color: var(--ink); min-width: 0; }
+  /* 抽到數字時的小彈跳動畫 */
+  .pop { animation: pop .55s ease-out; }
+  @keyframes pop {
+    0% { transform: scale(.4); opacity: 0; }
+    60% { transform: scale(1.18); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+
+  /* 抽數字大按鈕 */
+  #drawBtn {
+    width: min(92vw, 560px);
+    min-height: clamp(110px, 20vh, 180px);
+    background: var(--coral); color: var(--white);
+    border-radius: 48px;
+    font-size: clamp(2.6rem, 11vw, 4.5rem);
+    box-shadow: 0 10px 0 var(--coral-dark);
+  }
+  #drawBtn:active:not(:disabled) { transform: translateY(8px); box-shadow: 0 2px 0 var(--coral-dark); }
+  #drawBtn:disabled { background: #b9b3c9; box-shadow: 0 10px 0 #958fa8; cursor: default; }
+
+  /* 已抽出數字表格 */
+  .board-wrap { width: min(92vw, 560px); text-align: center; }
+  .board-title { font-size: 1.4rem; margin-bottom: 8px; }
+  #board { display: grid; gap: 8px; }
+  .cell {
+    aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
+    border-radius: 16px; background: #eaf8ff; color: #a9a6c2;   /* 未抽到：統一的淡色（不用半透明，才不會受背景影響） */
+    font-size: clamp(1.4rem, 6vw, 2.4rem);
+  }
+  .cell.drawn { background: var(--sun); color: var(--ink); box-shadow: 0 4px 0 #d9a900; }
+  .cell.latest { outline: 5px solid var(--coral); }
+
+  /* ========== 首頁：列印 Bingo 卡區塊 ========== */
+  .print-box {
+    width: min(92vw, 520px); background: var(--white);
+    border-radius: 32px; padding: 16px; text-align: center;
+    box-shadow: 0 8px 0 rgba(58,46,92,.2);
+  }
+  .print-box h2 { margin: 0 0 4px; font-size: clamp(1.5rem, 5.5vw, 2.1rem); }
+  .print-box p { margin: 0 0 12px; font-size: clamp(1rem, 3.6vw, 1.3rem); }
+  .print-row { display: flex; gap: 10px; }
+  .print-btn {
+    flex: 1; min-height: 76px; background: var(--sun); color: var(--ink);
+    border-radius: 24px; font-size: clamp(1.4rem, 5.5vw, 2rem);
+    box-shadow: 0 6px 0 #d9a900;
+  }
+  .print-btn:active { transform: translateY(5px); box-shadow: 0 1px 0 #d9a900; }
+  .rules { text-align: left; }
+  .rules p { margin: 0; line-height: 1.7; }
+  /* 獅子模式 40 個數字，一排 8 格，格子與字體縮小一點 */
+  #board.dense { gap: 5px; }
+  #board.dense .cell { font-size: clamp(1rem, 4.2vw, 1.7rem); border-radius: 10px; }
+  #board.dense .cell.drawn { box-shadow: 0 3px 0 #d9a900; }
+  #board.dense .cell.latest { outline-width: 4px; }
+
+  /* 卡片預覽視窗 */
+  #cardModal {
+    position: fixed; inset: 0; z-index: 10; overflow-y: auto;
+    background: rgba(58,46,92,.88); padding: 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  #cardImg { width: min(92vw, 520px); height: auto; background: #fff; border-radius: 12px; -webkit-user-select: auto; user-select: auto; }
+  .modal-note { color: #fff; margin: 0; text-align: center; font-size: 1.1rem; width: min(92vw, 520px); }
+  .modal-row { display: flex; flex-wrap: wrap; gap: 10px; width: min(92vw, 520px); }
+  .modal-row .small-btn { flex: 1; min-width: 140px; font-size: 1.3rem; min-height: 60px; }
+  .modal-row .main { background: var(--mint); color: #fff; box-shadow: 0 4px 0 #25a578; }
+
+  /* 電腦大螢幕：按鈕與表格並排，避免要捲動 */
+  @media (min-width: 900px) and (min-height: 700px) {
+    #board { gap: 10px; }
+  }
+  /* 手機橫放：縮小一點 */
+  @media (max-height: 520px) {
+    #display { min-height: 110px; }
+    #bigNum { font-size: 5rem; }
+    #drawBtn { min-height: 80px; font-size: 2.2rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
+</style>
+</head>
+<body>
+
+<!-- ========== 首頁 ========== -->
+<main id="home">
+  <h1>🌈 Bingo 抽數字 🎈</h1>
+  <p>選一個玩法吧！</p>
+  <div class="modes">
+    <button class="mode-btn" data-size="3" style="--c:#3ecf9b;--cs:#25a578"><span>🐢 小烏龜 3×3</span><small>數字 1～15</small></button>
+    <button class="mode-btn" data-size="4" style="--c:#ff9f43;--cs:#d97d1f"><span>🐰 小兔子 4×4</span><small>數字 1～25</small></button>
+    <button class="mode-btn" data-size="5" style="--c:#a66cff;--cs:#7f45d6"><span>🦁 獅子 5×5</span><small>數字 1～40</small></button>
+  </div>
+
+  <!-- 列印 Bingo 卡：按下後產生一張 A4 圖檔（內含 4 張不同的卡） -->
+  <section class="print-box">
+    <h2>🖨️ 產生 Bingo 卡</h2>
+    <p>一張 A4 有 4 張不同的卡，印出來剪開就能玩</p>
+    <div class="print-row">
+      <button class="print-btn" data-card="3">🐢 3×3</button>
+      <button class="print-btn" data-card="4">🐰 4×4</button>
+      <button class="print-btn" data-card="5">🦁 5×5</button>
+    </div>
+  </section>
+
+  <!-- 遊戲規則 -->
+  <section class="print-box rules">
+    <h2>🎯 怎麼玩？</h2>
+    <p>① 每人拿一張 Bingo 卡。<br>
+       ② 聽到數字，在自己的卡上找找看。有就圈起來，沒有就等下一個。<br>
+       ③ 橫的、直的或斜的，連成一整條線，就大喊「BINGO！」<br>
+       （不用整張填滿喔）</p>
+  </section>
+</main>
+
+<!-- ========== 遊戲畫面 ========== -->
+<main id="game" class="hidden">
+  <div class="topbar">
+    <button class="small-btn" id="menuBtn">🏠 更換模式</button>
+    <button class="small-btn" id="restartBtn">🔄 重新開始</button>
+  </div>
+
+  <!-- aria-live：讓視障輔助工具也能讀出數字 -->
+  <div id="display" aria-live="polite">
+    <span class="deco" id="decoL">🐾</span>
+    <span id="bigNum">？</span>
+    <span class="deco" id="decoR">🐾</span>
+  </div>
+
+  <button id="drawBtn">🎲 抽數字</button>
+
+  <div class="board-wrap">
+    <div class="board-title">已抽出：<span id="count">0</span> / <span id="total">0</span></div>
+    <div id="board"></div>
+  </div>
+</main>
+
+<!-- ========== Bingo 卡預覽視窗 ========== -->
+<div id="cardModal" class="hidden">
+  <div class="modal-row">
+    <button class="small-btn main" id="dlBtn">⬇️ 下載圖檔</button>
+    <button class="small-btn" id="regenBtn">🔄 重新產生</button>
+    <button class="small-btn" id="closeBtn">✖️ 關閉</button>
+  </div>
+  <img id="cardImg" alt="Bingo 卡預覽（A4，4 張）">
+  <p class="modal-note">如果沒有自動下載，請長按圖片選「儲存圖片」</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ================= 設定區（之後想改可以從這裡改） ================= */
+  var SPEAK_DELAY = 650;      // 「叮咚」之後，隔多久（毫秒）再念數字
+  var LOCK_TIME   = 900;      // 抽完一次後，短暫鎖住按鈕，避免小朋友狂按造成語音重疊
+  var CN_DIGITS   = ["零","一","二","三","四","五","六","七","八","九"];
+
+  // 三種動物模式（想改抽號範圍或名稱，改這裡就好）
+  //   max  = 抽號池 1～max；卡片格數 = 模式 × 模式（3×3=9、4×4=16、5×5=25），每張卡從池子裡挑不重複的數字
+  //   cols = 下方「已抽出的數字」一排放幾格
+  var MODES = {
+    3: { animal: "🐢", name: "小烏龜", max: 15, cols: 5 },
+    4: { animal: "🐰", name: "小兔子", max: 25, cols: 5 },
+    5: { animal: "🦁", name: "獅子",   max: 40, cols: 8 }
+  };
+
+  /* ================= 遊戲狀態 ================= */
+  var size = 0;               // 目前模式：3、4 或 5
+  var maxNum = 0;             // 最大數字：9、16 或 25
+  var pool = [];              // 抽獎池：還沒抽到的數字（已洗牌）
+  var drawn = [];             // 已抽出的數字（依抽出順序）
+  var locked = false;         // 是否暫時鎖住
+  var speakTimer = null;      // 「等一下再念數字」的計時器（重新開始時要取消）
+  var finishTimer = null;     // 「全部抽完」訊息的計時器（重新開始時要取消）
+
+  /* ================= 取得畫面元素 ================= */
+  var $ = function (id) { return document.getElementById(id); };
+  var home = $("home"), game = $("game"), display = $("display");
+  var bigNum = $("bigNum"), drawBtn = $("drawBtn"), board = $("board");
+
+  /* ================= 工具：洗牌（Fisher-Yates） ================= */
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  /* ================= 工具：數字轉中文（1～25 會念成 七、十一、二十） ================= */
+  function toChinese(n) {
+    if (n < 10) return CN_DIGITS[n];
+    if (n === 10) return "十";
+    if (n < 20) return "十" + CN_DIGITS[n - 10];
+    var tens = Math.floor(n / 10), ones = n % 10;
+    return CN_DIGITS[tens] + "十" + (ones ? CN_DIGITS[ones] : "");
+  }
+
+  /* ================= 音效：Web Audio 產生「叮咚」 ================= */
+  var audioCtx = null;
+  function getAudio() {
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) { try { audioCtx = new AC(); } catch (e) { audioCtx = null; } }
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  // 播放一個柔和的音：頻率、開始時間、長度
+  function tone(freq, start, dur) {
+    var ctx = audioCtx; if (!ctx) return;
+    var osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = "sine"; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+    gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);   // 音量不大聲
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(ctx.currentTime + start); osc.stop(ctx.currentTime + start + dur + 0.05);
+  }
+  function playDingDong() {
+    if (!getAudio()) return;       // 不支援就直接略過，不影響遊戲
+    tone(1175, 0, 0.35);           // 叮（高）
+    tone(880, 0.2, 0.45);          // 咚（低）
+  }
+
+  /* ================= 語音：SpeechSynthesis（zh-TW 優先） ================= */
+  var voice = null;
+  var canSpeak = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+  function pickVoice() {
+    if (!canSpeak) return;
+    var list = window.speechSynthesis.getVoices() || [];
+    voice = list.filter(function (v) { return v.lang.replace("_", "-") === "zh-TW"; })[0]
+         || list.filter(function (v) { return /^zh/i.test(v.lang); })[0]
+         || null;
+  }
+  if (canSpeak) {
+    pickVoice();
+    // 有些瀏覽器的語音清單是稍後才載入完成
+    if (window.speechSynthesis.addEventListener) window.speechSynthesis.addEventListener("voiceschanged", pickVoice);
+  }
+  function speak(text) {
+    if (!canSpeak) return;          // 不支援語音：靜靜略過
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = "zh-TW";             // 語言優先使用台灣中文
+      if (voice) u.voice = voice;
+      u.rate = 0.8;                 // 稍慢，小朋友比較聽得清楚
+      u.pitch = 1.2;
+      u.volume = 1;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* 語音失敗也不影響遊戲 */ }
+  }
+
+  /* ================= 畫面：建立格子 ================= */
+  function buildBoard() {
+    board.innerHTML = "";
+    board.style.gridTemplateColumns = "repeat(" + MODES[size].cols + ", 1fr)";   // 每排幾格
+    board.className = MODES[size].cols > 5 ? "dense" : "";                      // 格子多時縮小
+    for (var n = 1; n <= maxNum; n++) {
+      var c = document.createElement("div");
+      c.className = "cell"; c.id = "cell-" + n; c.textContent = n;
+      board.appendChild(c);
+    }
+    $("total").textContent = maxNum;
+  }
+
+  /* ================= 遊戲流程 ================= */
+  function startMode(s) {
+    size = s; maxNum = MODES[s].max;   // 小烏龜 15、小兔子 25、獅子 40
+    home.classList.add("hidden"); game.classList.remove("hidden");
+    buildBoard(); resetGame();
+  }
+
+  // 重新洗牌、清除紀錄
+  function resetGame() {
+    pool = [];
+    for (var n = 1; n <= maxNum; n++) pool.push(n);
+    shuffle(pool);
+    drawn = []; locked = false;
+    clearTimeout(speakTimer); clearTimeout(finishTimer);
+    if (canSpeak) window.speechSynthesis.cancel();
+    var cells = board.querySelectorAll(".cell");
+    for (var i = 0; i < cells.length; i++) cells[i].className = "cell";
+    display.classList.remove("done");
+    $("decoL").textContent = MODES[size].animal; $("decoR").textContent = MODES[size].animal;
+    bigNum.textContent = "？"; bigNum.classList.remove("pop");
+    $("count").textContent = "0";
+    drawBtn.disabled = false; drawBtn.textContent = "🎲 抽數字";
+  }
+
+  // 按下「抽數字」
+  function draw() {
+    if (locked || pool.length === 0) return;   // 抽完就不能再抽
+    locked = true;
+    setTimeout(function () { if (pool.length > 0) locked = false; }, LOCK_TIME);
+
+    var n = pool.pop();                        // 從池子「拿走」一個，所以不會重複
+    drawn.push(n);
+
+    playDingDong();                            // 1. 先播叮咚
+    showNumber(n);                             // 2. 畫面顯示
+    clearTimeout(speakTimer);
+    speakTimer = setTimeout(function () { speak(toChinese(n)); }, SPEAK_DELAY);   // 3. 再念數字
+
+    if (pool.length === 0) finish();           // 全部抽完
+  }
+
+  function showNumber(n) {
+    bigNum.textContent = n;
+    $("decoL").textContent = "🎉"; $("decoR").textContent = "🎉";
+    bigNum.classList.remove("pop"); void bigNum.offsetWidth; bigNum.classList.add("pop");   // 重新觸發動畫
+    var prev = board.querySelector(".latest");
+    if (prev) prev.classList.remove("latest");
+    var cell = $("cell-" + n);
+    cell.classList.add("drawn", "latest");
+    $("count").textContent = drawn.length;
+  }
+
+  function finish() {
+    drawBtn.disabled = true; drawBtn.textContent = "🎉 抽完囉";
+    // 等最後一個數字念完，再顯示完成訊息
+    finishTimer = setTimeout(function () {
+      display.classList.add("done");
+      bigNum.textContent = "全部抽完囉！";
+      $("decoL").textContent = "🎉"; $("decoR").textContent = "🎉";
+      bigNum.classList.remove("pop"); void bigNum.offsetWidth; bigNum.classList.add("pop");
+    }, 2200);
+  }
+
+  /* ================= 列印 Bingo 卡：用 Canvas 畫出 A4 圖檔 ================= */
+  var PAGE_W = 2480, PAGE_H = 3508;     // A4 直式，300dpi
+  var CARD_FONT = '"Arial Rounded MT Bold","PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif';
+  var cardUrl = null, cardN = 0;        // 目前預覽的圖檔網址、卡片大小
+
+  // 一張卡 = 從號碼池 1～max 隨機挑出 n×n 個「不重複」的數字，並隨機排列
+  // （小烏龜 15 選 9、小兔子 25 選 16、獅子 40 選 25，所以每張卡的數字組合也不同）
+  function randomCard(n) {
+    var a = [];
+    for (var i = 1; i <= MODES[n].max; i++) a.push(i);
+    return shuffle(a).slice(0, n * n);
+  }
+
+  // 畫出整張 A4（4 張不同的卡）
+  function renderCards(n) {
+    var cv = document.createElement("canvas");
+    cv.width = PAGE_W; cv.height = PAGE_H;
+    var g = cv.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, PAGE_W, PAGE_H);
+
+    // 產生 4 張「彼此不同」的卡
+    var cards = [], seen = {};
+    while (cards.length < 4) {
+      var c = randomCard(n), key = c.join(",");
+      if (!seen[key]) { seen[key] = true; cards.push(c); }
+    }
+
+    var qw = PAGE_W / 2, qh = PAGE_H / 2;   // 每張卡佔 A4 的四分之一
+    var grid = 1040, cell = grid / n;        // 格子總寬、每格大小（想放大縮小改 grid）
+    g.textAlign = "center"; g.textBaseline = "middle";
+
+    cards.forEach(function (nums, idx) {
+      var qx = (idx % 2) * qw, qy = Math.floor(idx / 2) * qh;
+      var gx = qx + (qw - grid) / 2, gy = qy + (qh - grid) / 2 + 80;
+
+      // 標題
+      var title = MODES[n].animal + " " + MODES[n].name + " BINGO";
+      var fs = 150;                                   // 字太寬時自動縮小，確保不超出卡片
+      g.fillStyle = "#ff6b5e";
+      do { g.font = "bold " + fs + "px " + CARD_FONT; fs -= 6; }
+      while (g.measureText(title).width > grid + 60 && fs > 60);
+      g.fillText(title, qx + qw / 2, gy - 100);
+
+      // 格子與數字
+      g.strokeStyle = "#3a2e5c"; g.lineWidth = 8;
+      g.fillStyle = "#3a2e5c"; g.font = "bold " + Math.round(cell * 0.55) + "px " + CARD_FONT;
+      for (var r = 0; r < n; r++) {
+        for (var col = 0; col < n; col++) {
+          var x = gx + col * cell, y = gy + r * cell;
+          g.strokeRect(x, y, cell, cell);
+          g.fillText(String(nums[r * n + col]), x + cell / 2, y + cell / 2 + cell * 0.04);
+        }
+      }
+      // 外框
+      g.strokeStyle = "#ff6b5e"; g.lineWidth = 16; g.strokeRect(gx, gy, grid, grid);
+    });
+
+    // 剪裁虛線
+    g.save();
+    g.strokeStyle = "#999"; g.lineWidth = 4; g.setLineDash([30, 24]);
+    g.beginPath();
+    g.moveTo(PAGE_W / 2, 100); g.lineTo(PAGE_W / 2, PAGE_H - 100);
+    g.moveTo(100, PAGE_H / 2); g.lineTo(PAGE_W - 100, PAGE_H / 2);
+    g.stroke(); g.restore();
+    g.fillStyle = "#999"; g.font = "40px " + CARD_FONT;
+    g.fillText("✂ 沿虛線剪開", PAGE_W / 2, 55);
+    g.fillText("橫、直、斜任一整條連線，就喊 BINGO！", PAGE_W / 2, PAGE_H - 55);
+    return cv;
+  }
+
+  // 產生並顯示預覽
+  function showCards(n) {
+    cardN = n;
+    renderCards(n).toBlob(function (blob) {
+      if (!blob) return;
+      if (cardUrl) URL.revokeObjectURL(cardUrl);
+      cardUrl = URL.createObjectURL(blob);
+      $("cardImg").src = cardUrl;
+      $("cardModal").classList.remove("hidden");
+      $("cardModal").scrollTop = 0;
+    }, "image/png");
+  }
+
+  // 下載圖檔
+  function downloadCards() {
+    if (!cardUrl) return;
+    var a = document.createElement("a");
+    a.href = cardUrl; a.download = "bingo-" + cardN + "x" + cardN + ".png";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  var printBtns = document.querySelectorAll(".print-btn");
+  for (var p = 0; p < printBtns.length; p++) {
+    printBtns[p].addEventListener("click", function () {
+      showCards(parseInt(this.getAttribute("data-card"), 10));
+    });
+  }
+  $("regenBtn").addEventListener("click", function () { showCards(cardN); });   // 重新隨機排列
+  $("dlBtn").addEventListener("click", downloadCards);
+  $("closeBtn").addEventListener("click", function () { $("cardModal").classList.add("hidden"); });
+
+  /* ================= 按鈕事件 ================= */
+  var modeBtns = document.querySelectorAll(".mode-btn");
+  for (var i = 0; i < modeBtns.length; i++) {
+    modeBtns[i].addEventListener("click", function () {
+      getAudio();                                // 在第一次點擊時啟用音效（手機需要）
+      startMode(parseInt(this.getAttribute("data-size"), 10));
+    });
+  }
+  drawBtn.addEventListener("click", draw);
+
+  // 點大數字可以再聽一次（不影響抽獎池）
+  display.addEventListener("click", function () {
+    if (drawn.length && !display.classList.contains("done")) speak(toChinese(drawn[drawn.length - 1]));
+  });
+
+  // 隨時都可以重新開始（不需要抽完，也不會跳出確認視窗）
+  $("restartBtn").addEventListener("click", resetGame);
+  // 隨時都可以回首頁更換模式
+  $("menuBtn").addEventListener("click", function () {
+    resetGame();                                 // 順便清掉語音與計時器
+    game.classList.add("hidden"); home.classList.remove("hidden");
+    window.scrollTo(0, 0);
+  });
+})();
+</script>
+</body>
+</html>
